@@ -4,22 +4,22 @@ var speakeasy = require('speakeasy');
 var request = require('request');
 
 var states = {
-    SAFEMODE: '_SAFEMODE',                // Where Alexa will only respond to 'Alexa leave safe mode'
+    SETUPMODE: '_SETUPMODE',              // where Alexa sets up the passcode
+    SAFEMODE: '_SAFEMODE',                // Alexa will be unresponsive except for unlocking or resend requests
     LEAVEMODE: '_LEAVEMODE'               // User must enter the correct 6 digit passcode
 };
-var transporter = nodemailer.createTransport({
-    service: 'yahoo',
-    auth: {
-        user: 'donotreply.safemode@yahoo.com',
-        pass: 'practicesafealexa'
-    }
-});
+
+//to make sure the user really wishes to go into safe mode
+var confirmationMessage = "Are you sure you would like to enter safe mode?";
 
 //this is the message when Alexa is entering safe mode
-var enterSafeMode = "Going into safe mode. Your one time passcode is ";
+var enterSafeMode = "Going into safe mode. You should find your one time passcode in your Alexa app.";
+
+//when the user does not wish to enter safe mode
+var goodbyeMessage = "Okay, I will not enter safe mode."
 
 //this is the message to repeat your passcode
-var repeatPassCode= "Your passcode is "
+var repeatPassCode= "Okay, I resent your passcode to the Alexa app."
 
 //this is the message when the user wishes to leave safe mode
 var enterPassCode = "Please say your six digit passcode ";//sent to your Amazon email address.";
@@ -27,17 +27,11 @@ var enterPassCode = "Please say your six digit passcode ";//sent to your Amazon 
 //this is the message when the user gives the correct six digit passcode while trying to leave safe mode
 var leaveSafeMode = "Leaving safe mode.";
 
-//this is the message when the user asks for their passcode to be resent
-var resendMessage = "I have sent the same passcode to your Amazon email address."
-
 //this is the message when the user gives something other than the correct six digit passcode while trying to leave safe mode
 var incorrectPassCode= "I'm sorry that's not correct. If you would like to try again please say, Alexa leave safe mode.";
 
 //when the user says anything other than "Alexa leave safe mode" while Alexa is in safe mode
 var safeModeMessage = "Sorry I can not do that, I am currently in safe mode. If you wish to leave safe mode say, Alexa leave safe mode.";
-
-//when emails can not be sent
-var emailError= 'I cannot send emails right now, please try again later.'
 
 //general help message
 var helpMessage = "If you would like me to enter safe mode please say, Alexa enter safe mode.";
@@ -53,41 +47,11 @@ exports.handler = function (event, context, callback) {
     alexa.execute();
 };
 
-// set state to start up and  welcome the user
+// set state to setup and confirm they wish to go into safe mode
 var newSessionHandler = {
   'LaunchRequest': function () {
-    // //if no amazon token, return a LinkAccount card
-    // if (this.event.session.user.accessToken == undefined) {
-    //     this.emit(':tellWithLinkAccountCard','To start using this skill, please use' +
-    //         ' the companion app to authenticate on Amazon.');
-    //     return;
-    // };
-    // //get users email
-    // var amznProfileURL = 'https://api.amazon.com/user/profile?access_token=';
-    // amznProfileURL += this.event.session.user.accessToken;
-    //
-    // request(amznProfileURL, function(error, response, body) {
-    //     if (response.statusCode == 200) {
-    //         var profile = JSON.parse(body);
-    //         userEmail=profile.email;
-    //     } else {
-    //         this.emit(':tell', "I can't connect to Amazon Profile Service right now, please try again later.");
-    //         return;
-    //     }
-    // });
-    //generate TOTP passcode
-    //TODO generate and send a qrcode so that this can work with Google Authenticator
-    var secret = speakeasy.generateSecret({length:20});
-    token = speakeasy.totp({
-        secret: secret.base32,
-        encoding: 'base32',
-        time: 1453667708 // specified in seconds
-    });
-    //send passcode via email
-    // var email = getMail(token,userEmail);
-    // transporter.sendMail(email);
-    this.handler.state = states.SAFEMODE;
-    this.emit(':tell', enterSafeMode+token, repeatPassCode+token);
+    this.handler.state = states.SETUPMODE;
+    this.emit(':ask', confirmationMessage);
   },
   'Unhandled': function () {
     this.emit(':tell', helpMessage,helpMessage);
@@ -96,7 +60,32 @@ var newSessionHandler = {
 
 // --------------- Functions that control the skill's behavior -----------------------
 
-// Handler for safe mode, Alexa should only respond to 'Alexa leave safe mode.' or 'Alexa send my passcode again'
+var setupModeHandlers = Alexa.CreateStateHandler(states.SETUPMODE, {
+    //user said yes, so create passcode and enter safe mode
+    'YesIntent': function () {
+        //generate TOTP passcode
+        //TODO generate and send a qrcode so that this can work with Google Authenticator
+        var secret = speakeasy.generateSecret({length:20});
+        token = speakeasy.totp({
+            secret: secret.base32,
+            encoding: 'base32',
+            time: 1453667708 // specified in seconds
+        });
+
+        this.handler.state = states.SAFEMODE;
+        this.emit(':tellWithCard', enterSafeMode, 'Safe Mode Passcode',"Your one time passcode is "+token);
+    },
+    'NoIntent': function(){
+        this.handler.state='';
+        this.emit(':tell',goodbyeMessage);
+    },
+    'Unhandled': function () {
+        this.emit(':tell',"Say yes to enter safe mode or no to leave.")
+    }
+});
+
+// Handler while in safe mode, Alexa should only respond to 'Alexa leave safe mode.',
+// 'Alexa send my passcode again', or the passcode itself
 var safeModeHandlers = Alexa.CreateStateHandler(states.SAFEMODE, {
     'LeaveIntent': function () {
 
@@ -119,16 +108,10 @@ var safeModeHandlers = Alexa.CreateStateHandler(states.SAFEMODE, {
             this.handler.state = states.SAFEMODE;
         }
     },
-    // 'ResendIntent': function () {
-    //
-    //     var emailSent = sendMail(token,userEmail)
-    //     if (emailSent){
-    //         this.emit(':tell', resendMessage, resendMessage);
-    //     }
-    //     else{
-    //         this.emit(':tell',emailError,emailError);
-    //     }
-    // },
+    'ResendIntent': function () {
+        this.emit(':tellWithCard', repeatPassCode, 'Safe Mode Passcode',"Your one time passcode is "+token);
+
+    },
     'Unhandled': function () {
         this.emit(':tell', safeModeMessage, safeModeMessage);
     }
@@ -155,14 +138,3 @@ var leaveModeHandlers = Alexa.CreateStateHandler(states.LEAVEMODE, {
         this.emit(':tell', incorrectPassCode, incorrectPassCode);
     }
 });
-
-function getMail(token,userEmail){
-    var mailOptions = {
-        from: 'donotreply.safemode@yahoo.com',
-        to: userEmail,
-        subject: 'Alexa SafeMode Passcode',
-        text: 'Here is your one time passcode: '+ token
-    };
-    return mailOptions;
-}
-
