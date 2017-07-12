@@ -1,0 +1,18 @@
+{
+  "name": "safemode",
+  "version": "1.0.0",
+  "description": "Put Alexa into safe mode and will only respond when given the correct TOTP",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Charles Bachmeier",
+  "license": "MIT",
+  "dependencies": {
+    "alexa-sdk": "^1.0.11",
+    "nodemailer": "^4.0.1",
+    "request": "^2.81.0",
+    "requirejs": "^2.3.3",
+    "speakeasy": "^2.0.0"
+  }
+}
