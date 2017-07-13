@@ -28,7 +28,7 @@ var enterPassCode = "Please say your six digit passcode ";//sent to your Amazon 
 var leaveSafeMode = "Leaving safe mode.";
 
 //this is the message when the user gives something other than the correct six digit passcode while trying to leave safe mode
-var incorrectPassCode= "I'm sorry that's not the correct passcode. If you would like to try again please say, Alexa leave safe mode.";
+var incorrectPassCode= "I'm sorry that's not the correct passcode. If you would like to try again please say, Alexa leave safe mode. If you need me to resend your passcode say, Alexa send me my passcode.s";
 
 //when the user says anything other than "Alexa leave safe mode" while Alexa is in safe mode
 var safeModeMessage = "Sorry I can not do that, I am currently in safe mode. If you wish to leave safe mode say, Alexa leave safe mode.";
@@ -53,8 +53,11 @@ var newSessionHandler = {
     this.handler.state = states.SETUPMODE;
     this.emit(':ask', confirmationMessage);
   },
+    'SessionEndedRequest': function () {
+        this.emit(':tell',goodbyeMessage);
+    },
   'Unhandled': function () {
-    this.emit(':tell', helpMessage,helpMessage);
+    this.emit(':ask', helpMessage,helpMessage);
   }
 };
 
@@ -73,13 +76,16 @@ var setupModeHandlers = Alexa.CreateStateHandler(states.SETUPMODE, {
         });
 
         this.handler.state = states.SAFEMODE;
-        this.emit(':tellWithCard', enterSafeMode, 'Safe Mode Passcode',"Your one time passcode is "+token);
+        this.emit(':askWithCard', enterSafeMode,incorrectPassCode, 'Safe Mode Passcode',"Your one time passcode is "+token);
     },
     'AMAZON.NoIntent': function(){
         this.emit(':tell',goodbyeMessage);
     },
+    'SessionEndedRequest': function () {
+        this.emit(':tell',goodbyeMessage);
+    },
     'Unhandled': function () {
-        this.emit(':tell',"Say yes to enter safe mode or no to leave.");
+        this.emit(':ask',"Say yes to enter safe mode or no to leave.");
     }
 });
 
@@ -98,20 +104,19 @@ var safeModeHandlers = Alexa.CreateStateHandler(states.SAFEMODE, {
         //user submitted passcode
         var userPassCode = parseInt(this.event.request.intent.slots.passcode.value);
         if (token==userPassCode){
-            this.handler.state = states.SETUPMODE;
             this.emit(':tell',leaveSafeMode);
 
         }
         else {
-            this.emit(':tell',incorrectPassCode,incorrectPassCode);
+            this.emit(':ask',incorrectPassCode,incorrectPassCode);
         }
     },
     'ResendIntent': function () {
-        this.emit(':tellWithCard', repeatPassCode, 'Safe Mode Passcode',"Your one time passcode is "+token);
+        this.emit(':askWithCard', repeatPassCode, incorrectPassCode, 'Safe Mode Passcode',"Your one time passcode is "+token);
 
     },
     'Unhandled': function () {
-        this.emit(':tell', safeModeMessage, safeModeMessage);
+        this.emit(':ask', safeModeMessage, safeModeMessage);
     }
 });
 
@@ -123,16 +128,15 @@ var leaveModeHandlers = Alexa.CreateStateHandler(states.LEAVEMODE, {
         //user submitted passcode
         var userPassCode = parseInt(this.event.request.intent.slots.passcode.value);
         if (token==userPassCode) {
-            this.handler.state = states.SETUPMODE;
             this.emit(':tell', leaveSafeMode);
         }
         else {
             this.handler.state = states.SAFEMODE;
-            this.emit(':tell',incorrectPassCode,incorrectPassCode);
+            this.emit(':ask',incorrectPassCode,incorrectPassCode);
         }
     },
     'Unhandled': function () {
         this.handler.state = states.SAFEMODE;
-        this.emit(':tell', incorrectPassCode, incorrectPassCode);
+        this.emit(':ask', incorrectPassCode, incorrectPassCode);
     }
 });
